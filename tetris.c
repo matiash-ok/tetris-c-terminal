@@ -1,5 +1,6 @@
 
 #include <curses.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,16 +12,19 @@
 #define BOARD_WIDTH 10
 #define BOARD_HEIGHT 20
 
-int gameBoard[BOARD_WIDTH][BOARD_HEIGHT + 3] = {0};
-bool should_create_tetro = false;
+enum tetris_forms {L , Z , Square , Line , T , rL , rZ };
 
 typedef struct Tetroid {
     int x ;
     int y ;
-    bool stopped;
     int mode;
 }tetro;
 
+int gameBoard[BOARD_WIDTH][BOARD_HEIGHT + 4] = {0};
+bool should_create_tetro = false;
+bool stopped = false;
+int spin = 0;
+char tetro_type;
 tetro tetroid;
 tetro tetroid1;
 tetro tetroid2;
@@ -32,31 +36,28 @@ void clearTerminal() {
 
 void create_tetro(){
    // int rand_num = (rand() % 7) + 1;
-    int rand_num = 1 ;
+    int rand_num = 0 ;
+    int starting_x = BOARD_WIDTH/2;
     switch (rand_num) {
-        case 1:
-            // lineblock
+        case L:
+            // L shape tetro
             // main tetroid
-            gameBoard[BOARD_WIDTH/2][BOARD_HEIGHT] = 3;
-            tetroid.x = BOARD_WIDTH / 2;
-            tetroid.y = BOARD_HEIGHT ;
-            tetroid.stopped = false;
+            gameBoard[starting_x][BOARD_HEIGHT+1] = 3;
+            tetroid.x = starting_x;
+            tetroid.y = BOARD_HEIGHT + 1  ;
 
             //other tetroid
-            gameBoard[BOARD_WIDTH/2][BOARD_HEIGHT-1] = 2;
-            tetroid1.x = BOARD_WIDTH / 2;
-            tetroid1.y = BOARD_HEIGHT - 1 ;
-            tetroid1.stopped = false;
+            gameBoard[starting_x][BOARD_HEIGHT+2] = 2;
+            tetroid1.x = starting_x;
+            tetroid1.y = BOARD_HEIGHT + 2 ;
 
-            gameBoard[BOARD_WIDTH/2][BOARD_HEIGHT-2] = 4;
-            tetroid2.x = BOARD_WIDTH / 2;
-            tetroid2.y = BOARD_HEIGHT - 2 ;
-            tetroid2.stopped = false;
+            gameBoard[starting_x][BOARD_HEIGHT] = 4;
+            tetroid2.x = starting_x;
+            tetroid2.y = BOARD_HEIGHT;
 
-            gameBoard[BOARD_WIDTH/2][BOARD_HEIGHT+1] = 5;
-            tetroid3.x = BOARD_WIDTH / 2;
-            tetroid3.y = BOARD_HEIGHT + 2 ;
-            tetroid3.stopped = false;
+            gameBoard[starting_x + 1][BOARD_HEIGHT] = 5;
+            tetroid3.x = starting_x + 1;
+            tetroid3.y = BOARD_HEIGHT;
             break;
       //  case 2: create_tetro_form(2);
       //  case 3: create_tetro_form(3);
@@ -68,8 +69,20 @@ void create_tetro(){
     should_create_tetro = false;
   }
 
+int tetroblock_can_spin(int*xs , int*ys,int spin){
+        for(int i = 0 ; i < 3 ; i++){
+            if(    xs[i] <  0 && xs[i] >= BOARD_WIDTH
+                && ys[i] < 0  && ys[i] >= BOARD_HEIGHT
+                && gameBoard[xs[i]][ys[i]] == 1
+            ){
+                return false;
+            }
+    }
+    return true;
+}
 bool tetroblock_can_move(int mov){
     return (
+        !stopped &&
        (tetroid.x  + mov >= 0 && tetroid.x  + mov < BOARD_WIDTH) &&
        (tetroid1.x + mov >= 0 && tetroid1.x + mov < BOARD_WIDTH) &&
        (tetroid2.x + mov >= 0 && tetroid2.x + mov < BOARD_WIDTH) &&
@@ -77,20 +90,30 @@ bool tetroblock_can_move(int mov){
 
         (gameBoard[tetroid.x+mov][tetroid.y] == 0 ||
          gameBoard[tetroid.x+mov][tetroid.y] == 2 ||
-         gameBoard[tetroid.x+mov][tetroid.y] == 3 ) &&
+         gameBoard[tetroid.x+mov][tetroid.y] == 3 ||
+         gameBoard[tetroid.x+mov][tetroid.y] == 4 ||
+         gameBoard[tetroid.x+mov][tetroid.y] == 5 )
+    &&
 
         (gameBoard[tetroid1.x+mov][tetroid1.y] == 0 ||
          gameBoard[tetroid1.x+mov][tetroid1.y] == 2 ||
-         gameBoard[tetroid1.x+mov][tetroid1.y] == 3 ) &&
+         gameBoard[tetroid1.x+mov][tetroid1.y] == 3 ||
+         gameBoard[tetroid1.x+mov][tetroid1.y] == 4 ||
+         gameBoard[tetroid1.x+mov][tetroid1.y] == 5)
+    &&
 
         (gameBoard[tetroid2.x+mov][tetroid2.y] == 0 ||
          gameBoard[tetroid2.x+mov][tetroid2.y] == 2 ||
-         gameBoard[tetroid2.x+mov][tetroid2.y] == 3 ) &&
+         gameBoard[tetroid2.x+mov][tetroid2.y] == 3 ||
+         gameBoard[tetroid2.x+mov][tetroid2.y] == 4 ||
+         gameBoard[tetroid2.x+mov][tetroid2.y] == 5)
+    &&
 
         (gameBoard[tetroid3.x+mov][tetroid3.y] == 0 ||
          gameBoard[tetroid3.x+mov][tetroid3.y] == 2 ||
-         gameBoard[tetroid3.x+mov][tetroid3.y] == 3 )
-
+         gameBoard[tetroid3.x+mov][tetroid3.y] == 3 ||
+         gameBoard[tetroid3.x+mov][tetroid3.y] == 4 ||
+         gameBoard[tetroid3.x+mov][tetroid3.y] == 5)
     );
 };
 
@@ -115,33 +138,77 @@ void drawGameBoard() {
     mvprintw(6,14,"2 tetro1 X : %d tetro Y : %d",tetroid1.x ,tetroid1.y);
     mvprintw(7,14,"4 tetro2 X : %d tetro Y : %d",tetroid2.x ,tetroid2.y);
     mvprintw(8,14,"5 tetro3 X : %d tetro Y : %d",tetroid3.x ,tetroid3.y);
+    mvprintw(10,14,"stopped : %d",stopped);
+    int rotation = pow(-1,spin/2);
+    mvprintw(11,14,"spin : %d rotation:%d",spin,rotation);
+
 }
 
 void clean_board(){
-   for (int y = 0; y < BOARD_HEIGHT ; y++) {
-        for (int x = 0; x < BOARD_WIDTH; x++) {
-            if (gameBoard[x][y] == 3){
-                gameBoard[x][y] = 1;
-            }
-        }
-    }
 }
+
+int get_rotation(int spin ){
+    return pow(-1,spin/2);
+}
+void spin_tetro(){
+            int xs[] = { tetroid1.x + 1 * get_rotation(spin +1),
+                         tetroid2.x - 1 * get_rotation(spin+1),
+                         tetroid3.x + 1 * (get_rotation(spin+2)+get_rotation(spin+3))
+                        };
+            int ys[] = {tetroid1.y - 1 * get_rotation(spin +1),
+                        tetroid2.y + 1 * get_rotation(spin+1),
+                        tetroid3.y + 1 * (get_rotation(spin+3)+get_rotation(spin))
+                       };
+    bool flag_spin ;
+    switch(tetro_type){
+        case L:
+            flag_spin = tetroblock_can_spin(xs,ys,spin);
+            if(flag_spin) break;
+            gameBoard[tetroid1.x][tetroid1.y] = 0;
+            gameBoard[tetroid2.x][tetroid2.y] = 0;
+            gameBoard[tetroid3.x][tetroid3.y] = 0;
+
+            tetroid1.x = xs[0];
+            tetroid1.y = ys[0];
+
+            gameBoard[tetroid1.x][tetroid1.y] = 2;
+
+            tetroid2.x = xs[1];
+            tetroid2.y = ys[1];
+
+            gameBoard[tetroid2.x][tetroid2.y] = 4;
+
+            tetroid3.x = xs[2];
+            tetroid3.y = ys[2];
+
+            gameBoard[tetroid3.x][tetroid3.y] = 5;
+
+            if(spin == 4 ){
+                spin = 0;
+            };
+            spin++;
+            drawGameBoard();
+            break;
+    }
+};
+
 void move_tetro(int mov){
 
     if(tetroblock_can_move(mov)){
         gameBoard[tetroid.x][tetroid.y] = 0;
+        gameBoard[tetroid1.x][tetroid1.y] = 0;
+        gameBoard[tetroid2.x][tetroid2.y] = 0;
+        gameBoard[tetroid3.x][tetroid3.y] = 0;
+
         gameBoard[tetroid.x + mov][tetroid.y] = 3;
         tetroid.x = tetroid.x + mov;
 
-        gameBoard[tetroid1.x][tetroid1.y] = 0;
         gameBoard[tetroid1.x + mov][tetroid1.y] = 2;
         tetroid1.x = tetroid1.x + mov;
 
-        gameBoard[tetroid2.x][tetroid2.y] = 0;
         gameBoard[tetroid2.x + mov][tetroid2.y] = 4;
         tetroid2.x = tetroid2.x + mov;
 
-        gameBoard[tetroid3.x][tetroid3.y] = 0;
         gameBoard[tetroid3.x + mov][tetroid3.y] = 5;
         tetroid3.x = tetroid3.x + mov;
 
@@ -150,7 +217,7 @@ void move_tetro(int mov){
 
 }
 void gravity(){
-   for (int y = 0; y < BOARD_HEIGHT+3 ; y++) {
+   for (int y = 0; y < BOARD_HEIGHT+4 ; y++) {
         for (int x = 0; x < BOARD_WIDTH; x++) {
            if(gameBoard[x][y] == 0){
 
@@ -159,12 +226,13 @@ void gravity(){
                 }
            }
 
-            if(gameBoard[x][y] == 3 ||
+            if(!stopped &&
+               gameBoard[x][y] == 3 ||
                gameBoard[x][y] == 2 ||
                gameBoard[x][y] == 4 ||
                gameBoard[x][y] == 5
             ){
-                if(y+1 < BOARD_HEIGHT + 3 && gameBoard[x][y-1] != 1){
+                if(y-1 >= 0 && y+1 < BOARD_HEIGHT + 4 && gameBoard[x][y-1] != 1){
                     switch(gameBoard[x][y]){
                         case 3: tetroid.y = y-1  ;break;
                         case 2: tetroid1.y = y-1 ;break;
@@ -173,7 +241,7 @@ void gravity(){
                     }
                     gameBoard[x][y] = gameBoard[x][y+1];
                 }else{
-                    tetroid.stopped = true;
+                    stopped = true;
                 }
             }
         }
@@ -213,13 +281,14 @@ int main() {
       }
       drawGameBoard();
       ch = getch();
+       if(ch == KEY_UP)spin_tetro();
        if(ch == KEY_LEFT)move_tetro(-1) ;
        if(ch == KEY_RIGHT)move_tetro(+1) ;
       if(should_create_tetro){
            clean_board();
            create_tetro();
        }
-      usleep(200000);
+      usleep(100000);
     }
 
     endwin();

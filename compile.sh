@@ -1,1 +1,1 @@
-gcc tetris.c -o tetris -lncursesw -I/usr/include/ncursesw
+gcc tetris.c -o tetris -lncursesw -I/usr/include/ncursesw -lm

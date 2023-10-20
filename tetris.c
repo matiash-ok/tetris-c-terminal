@@ -30,6 +30,8 @@ tetro tetroid;
 tetro tetroid1;
 tetro tetroid2;
 tetro tetroid3;
+int lines_complete[BOARD_HEIGHT] = {-1};
+int lines_complete_count = 0 ;
 
 void clearTerminal() {
     refresh();
@@ -40,6 +42,12 @@ int comparefunction(const void* a ,const void * b){
     return *(int*)a -*(int*) b;
 }
 
+void reset_lines_complete(){
+    for(int i = 0; i < BOARD_HEIGHT;i++){
+        lines_complete[i] = -1 ;
+    }
+    lines_complete_count = 0;
+}
 void clear_tetro(){
 
     gameBoard[tetroid .x][tetroid .y] = 1;
@@ -48,6 +56,7 @@ void clear_tetro(){
     gameBoard[tetroid3.x][tetroid3.y] = 1;
 
 }
+
 void create_tetro(){
    // int rand_num = (rand() % 7) + 1;
     int rand_num = 0 ;
@@ -303,14 +312,60 @@ void move_tetro(int mov){
     }
 
 }
+
+void check_complete_line(){
+
+    for(int i = 1 ; i < BOARD_HEIGHT ; i++){
+
+        bool line_complete = true;
+
+        for(int j = 0 ; j < BOARD_WIDTH;j++){
+           if(gameBoard[j][i] != 1) line_complete = false;
+        }
+
+        if(line_complete){
+            lines_complete[lines_complete_count] = i;
+            lines_complete_count++;
+            for(int j = 0 ; j < BOARD_WIDTH;j++){
+                gameBoard[j][i] = 0;
+            }
+
+        }
+    }
+}
+
 void gravity(){
    if(stopped) return ;
-   for (int y = 0; y < BOARD_HEIGHT+4 ; y++) {
+   int gravity_count = 0 ;
+   for (int y = 1; y < BOARD_HEIGHT+4 ; y++) {
         for (int x = 0; x < BOARD_WIDTH; x++) {
-           if(gameBoard[x][y] == 0){
+            if(gameBoard[x][y] == 1){
+                int previous_y_thats_not_complete_line = y+1;
+                for (int i = 0; i < sizeof(lines_complete) / sizeof(int); i++) {
+                    if (lines_complete[i] == previous_y_thats_not_complete_line) {
+                        previous_y_thats_not_complete_line++;
+                    }
+                }
 
-                if(y+1<= BOARD_HEIGHT && gameBoard[x][y+1] != 1){
-                       gameBoard[x][y] = gameBoard[x][y+1];
+                if(y+1<= BOARD_HEIGHT){
+                    if(gravity_count > 0){
+                        gameBoard[x][y] = gameBoard[x][previous_y_thats_not_complete_line];
+                    }
+                }
+            }
+
+           if(gameBoard[x][y] == 0){
+                for (int i = 0; i < sizeof(lines_complete) / sizeof(int); i++) {
+                    if (lines_complete[i] == y) {
+                        gravity_count++;
+                        break; // If found, exit the loop
+                    }
+                }
+
+                if(y+1<= BOARD_HEIGHT){
+                    if(gravity_count > 0 || gameBoard[x][y+1] != 1){
+                        gameBoard[x][y] = gameBoard[x][y+1];
+                    }
                 }
            }
 
@@ -334,7 +389,14 @@ void gravity(){
             }
         }
     }
+
+    for (int i = 0; i < sizeof(lines_complete) / sizeof(int); i++) {
+        lines_complete[i] = -1 ;
+     }
+
+    lines_complete_count = 0;
     drawGameBoard();
+
 }
 
 int main() {
@@ -377,7 +439,7 @@ int main() {
 
       if(stopped){
            clear_tetro();
-          // check_line_complete();
+           check_complete_line();
            create_tetro();
             stopped = false;
        }

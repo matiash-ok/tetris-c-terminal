@@ -24,6 +24,8 @@ typedef struct Tetroid {
 int gameBoard[BOARD_WIDTH][BOARD_HEIGHT + 4] = {0};
 bool should_create_tetro = false;
 bool stopped = false;
+bool crashed = false;
+int tetrocells_count = 0 ;
 int spin = 0;
 char tetro_type;
 tetro tetroid;
@@ -125,9 +127,11 @@ bool tetroblock_can_move(int mov){
 };
 
 void drawGameBoard() {
-    clearTerminal();
 
-    for (int y = BOARD_HEIGHT-1; y >= 1; y--) {
+    for (int y = BOARD_HEIGHT-1; y >= 0; y--) {
+        for (int x = 0; x < BOARD_WIDTH; x++) {
+            mvprintw(BOARD_HEIGHT,x,"%d",x);
+        }
         for (int x = 0; x < BOARD_WIDTH; x++) {
             if(gameBoard[x][y] == 0){
                 mvprintw(BOARD_HEIGHT-y-1,x,"."); // Occupied cell
@@ -152,7 +156,8 @@ void drawGameBoard() {
     mvprintw(10,14,"stopped : %s",stopped?"yes":"no");
     int rotation = pow(-1,spin/2);
     mvprintw(11,14,"spin : %d rotation:%d",spin,rotation);
-
+    mvprintw(13,14,"lines complete:%d",lines_complete_count);
+    mvprintw(14,14,"crashed %s", crashed?"true":"false");
 }
 
 int get_rotation(int spin ){
@@ -160,6 +165,92 @@ int get_rotation(int spin ){
 }
 
 void go_down(){
+
+    int xs[] = {
+         tetroid.x,
+         tetroid1.x,
+         tetroid2.x,
+         tetroid3.x,
+    };
+
+   int ys[] = {
+        tetroid.y,
+        tetroid1.y,
+        tetroid2.y,
+        tetroid3.y
+    };
+
+    int lowers_xs[4] = {-1};
+    int lowers_ys[4] = {BOARD_HEIGHT};
+
+    lowers_ys[0] = BOARD_HEIGHT;
+    lowers_ys[1] = BOARD_HEIGHT;
+    lowers_ys[2] = BOARD_HEIGHT;
+    lowers_ys[3] = BOARD_HEIGHT;
+
+    lowers_xs[0] = -1;
+    lowers_xs[1] = -1;
+    lowers_xs[2] = -1;
+    lowers_xs[3] = -1;
+    // check the widht of the tetroid and if every x can land on the diff y
+
+    for(int i = 0 ; i < 4 ; i++){
+        bool already_included = false;
+        int _saved_place = -1 ;
+        int _saved_x = -1 ;
+
+        for(int j = 0  ; j < 4 ; j++){
+
+            if(already_included) break;
+
+            if(xs[i] != lowers_xs[j] && lowers_xs[j] == -1){
+                    lowers_xs[i] = xs[j];
+                    lowers_ys[i] = ys[j];
+                    already_included = true;
+            }else if(lowers_ys[j] == xs[i]){
+                if(lowers_ys[j] >= ys[i]) lowers_ys[j] = ys[i];
+            }
+        }
+    }
+
+    // check where is the upper point where the tetro can land
+
+
+    bool can_land = true;
+
+    for(int i = 0 ; i < 4 ; i++){
+
+        int a = lowers_ys[i] -1 ;
+
+        if( lowers_xs[i] != -1
+            && gameBoard[lowers_xs[i]][a] == 1){
+            can_land = false;
+            crashed = true;
+        }
+    }
+
+    if(!can_land) return;
+
+    unsigned int height_diff = 1 ;
+
+    gameBoard[tetroid.x][tetroid.y] = 0;
+    gameBoard[tetroid1.x][tetroid1.y] = 0;
+    gameBoard[tetroid2.x][tetroid2.y] = 0;
+    gameBoard[tetroid3.x][tetroid3.y] = 0;
+
+    tetroid.y = tetroid.y - height_diff;
+    tetroid1.y = tetroid1.y - height_diff;
+    tetroid2.y = tetroid2.y - height_diff;
+    tetroid3.y = tetroid3.y - height_diff;
+
+    gameBoard[tetroid.x][tetroid.y] = 3;
+    gameBoard[tetroid1.x][tetroid1.y] = 2;
+    gameBoard[tetroid2.x][tetroid2.y] = 4;
+    gameBoard[tetroid3.x][tetroid3.y] = 5;
+
+}
+
+void go_bottom(){
     int xs[] = {
          tetroid.x,
          tetroid1.x,
@@ -236,10 +327,6 @@ void go_down(){
 
     stopped = true;
 
-    drawGameBoard();
-    // make a for that loops between the xs and ys
-    // to find the heighst point
-    // to the tetroid to crash
 }
 
 void spin_tetro(){
@@ -283,7 +370,6 @@ void spin_tetro(){
                 spin = 0;
             };
             spin++;
-            drawGameBoard();
             break;
     }
 };
@@ -308,7 +394,6 @@ void move_tetro(int mov){
         gameBoard[tetroid3.x + mov][tetroid3.y] = 5;
         tetroid3.x = tetroid3.x + mov;
 
-        drawGameBoard();
     }
 
 }
@@ -329,13 +414,16 @@ void check_complete_line(){
             for(int j = 0 ; j < BOARD_WIDTH;j++){
                 gameBoard[j][i] = 0;
             }
-
         }
     }
 }
 
 void gravity(){
-   if(stopped) return ;
+   if(stopped && tetrocells_count == 4) return ;
+    if(crashed){
+        stopped = true;
+        return;
+    }
    int gravity_count = 0 ;
    for (int y = 1; y < BOARD_HEIGHT+4 ; y++) {
         for (int x = 0; x < BOARD_WIDTH; x++) {
@@ -369,13 +457,19 @@ void gravity(){
                 }
            }
 
+// lo que pasa es k tenes que dejar que todo el tetroid de asiente y despues pararlo
+            //  lo cual es complicado , porque no sabe cuando esta parado entonces
+            //  puede seguir bajando independiemente
+            //  de lo que tenga abajo eso no tiene sentido
+            //
             if(
-               gameBoard[x][y] == 3 ||
-               gameBoard[x][y] == 2 ||
-               gameBoard[x][y] == 4 ||
-               gameBoard[x][y] == 5
+                gameBoard[x][y] == 3 ||
+                gameBoard[x][y] == 2 ||
+                gameBoard[x][y] == 4 ||
+                gameBoard[x][y] == 5
             ){
-                if(y-1 >= 0 && y+1 < BOARD_HEIGHT + 4 && gameBoard[x][y-1] != 1){
+                tetrocells_count++;
+                if(y-1 >= 1 && y+1 < BOARD_HEIGHT + 4 && gameBoard[x][y-1] != 1){
                     switch(gameBoard[x][y]){
                         case 3: tetroid.y = y-1  ;break;
                         case 2: tetroid1.y = y-1 ;break;
@@ -395,7 +489,6 @@ void gravity(){
      }
 
     lines_complete_count = 0;
-    drawGameBoard();
 
 }
 
@@ -433,17 +526,20 @@ int main() {
       drawGameBoard();
       ch = getch();
        if(ch == KEY_UP)spin_tetro();
+       if(ch == KEY_DOWN)go_down();
        if(ch == KEY_LEFT)move_tetro(-1) ;
        if(ch == KEY_RIGHT)move_tetro(+1) ;
-       if(ch == 32) go_down();
+       if(ch == 32) go_bottom();
 
       if(stopped){
            clear_tetro();
            check_complete_line();
            create_tetro();
-            stopped = false;
+           stopped = false;
+           crashed = false;
+           tetrocells_count = 0 ;
        }
-      usleep(100000);
+      usleep(10000);
     }
 
     endwin();
